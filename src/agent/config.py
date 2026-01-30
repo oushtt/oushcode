@@ -33,6 +33,11 @@ class Config:
     github_api_version: str
     git_user_name: str
     git_user_email: str
+    agent_max_steps: int
+    agent_max_tool_output_chars: int
+    agent_temperature: float
+    agent_tool_timeout_sec: int
+    agent_allow_shell: bool
 
     @staticmethod
     def load() -> "Config":
@@ -42,6 +47,10 @@ class Config:
                 return int(value)
             except ValueError:
                 return default
+
+        def _get_bool(name: str, default: bool) -> bool:
+            value = os.getenv(name, "1" if default else "0").strip().lower()
+            return value in {"1", "true", "yes", "on"}
 
         return Config(
             env=os.getenv("APP_ENV", "dev"),
@@ -64,4 +73,9 @@ class Config:
             github_api_version=os.getenv("GITHUB_API_VERSION", "2022-11-28"),
             git_user_name=os.getenv("GIT_USER_NAME", "code-agent[bot]"),
             git_user_email=os.getenv("GIT_USER_EMAIL", "code-agent@example.com"),
+            agent_max_steps=_get_int("AGENT_MAX_STEPS", 12),
+            agent_max_tool_output_chars=_get_int("AGENT_MAX_TOOL_OUTPUT_CHARS", 4000),
+            agent_temperature=float(os.getenv("AGENT_TEMPERATURE", "0.2")),
+            agent_tool_timeout_sec=_get_int("AGENT_TOOL_TIMEOUT_SEC", 120),
+            agent_allow_shell=_get_bool("AGENT_ALLOW_SHELL", False),
         )
