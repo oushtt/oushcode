@@ -1,0 +1,10 @@
+{
+  "action": "opened",
+  "pull_request": {
+    "number": 2,
+    "head": {"sha": "abc123"}
+  },
+  "repository": {
+    "full_name": "demo/repo"
+  }
+}

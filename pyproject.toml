@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coding-agents-sdlc"
+version = "0.1.0"
+description = "Automated SDLC agent system for GitHub"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ITMO Hackathon" }]
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "requests>=2.31",
+  "PyJWT>=2.8",
+  "cryptography>=42.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.3",
+  "black>=24.1",
+  "mypy>=1.8",
+  "pytest>=7.4",
+]
+
+[project.scripts]
+agent = "agent.cli.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

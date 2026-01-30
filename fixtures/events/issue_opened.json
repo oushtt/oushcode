@@ -1,0 +1,11 @@
+{
+  "action": "opened",
+  "issue": {
+    "number": 1,
+    "title": "Demo issue",
+    "body": "Implement demo feature"
+  },
+  "repository": {
+    "full_name": "demo/repo"
+  }
+}
