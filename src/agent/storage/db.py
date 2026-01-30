@@ -142,9 +142,11 @@ def enqueue_job(
     issue_number: int | None = None,
     pr_number: int | None = None,
     head_sha: str | None = None,
+    iter_num: int | None = None,
     delivery_id: str | None = None,
 ) -> int:
     now = _utcnow()
+    iter_value = int(iter_num) if iter_num is not None else 0
     cur = conn.execute(
         """
         INSERT INTO jobs (
@@ -163,7 +165,7 @@ def enqueue_job(
             issue_number,
             pr_number,
             head_sha,
-            0,
+            iter_value,
             delivery_id,
         ),
     )
@@ -176,7 +178,14 @@ def fetch_next_job(conn: sqlite3.Connection) -> Job | None:
         """
         SELECT * FROM jobs
         WHERE status = 'queued'
-        ORDER BY id ASC
+        ORDER BY
+            CASE kind
+                WHEN 'fix' THEN 0
+                WHEN 'review' THEN 1
+                WHEN 'issue' THEN 2
+                ELSE 3
+            END,
+            id ASC
         LIMIT 1
         """
     )
@@ -250,6 +259,52 @@ def list_jobs(conn: sqlite3.Connection, status: str | None = None) -> Iterable[J
             head_sha=row["head_sha"],
             iter=row["iter"],
         )
+
+
+def has_active_job(
+    conn: sqlite3.Connection,
+    *,
+    kind: str,
+    repo: str,
+    pr_number: int | None = None,
+    issue_number: int | None = None,
+) -> bool:
+    cur = conn.execute(
+        """
+        SELECT 1 FROM jobs
+        WHERE kind = ?
+          AND repo = ?
+          AND status IN ('queued', 'running')
+          AND (pr_number IS ? OR pr_number = ?)
+          AND (issue_number IS ? OR issue_number = ?)
+        LIMIT 1
+        """,
+        (kind, repo, pr_number, pr_number, issue_number, issue_number),
+    )
+    return cur.fetchone() is not None
+
+
+def get_iteration_count(
+    conn: sqlite3.Connection,
+    *,
+    repo: str,
+    issue_number: int | None,
+    pr_number: int | None,
+) -> int:
+    cur = conn.execute(
+        """
+        SELECT MAX(iter) as max_iter
+        FROM iterations
+        WHERE repo = ?
+          AND (issue_number IS ? OR issue_number = ?)
+          AND (pr_number IS ? OR pr_number = ?)
+        """,
+        (repo, issue_number, issue_number, pr_number, pr_number),
+    )
+    row = cur.fetchone()
+    if row is None or row["max_iter"] is None:
+        return 0
+    return int(row["max_iter"])
 
 
 def get_job(conn: sqlite3.Connection, job_id: int) -> Job | None:

@@ -12,16 +12,17 @@ class GitHubClient:
     api_base: str
     api_version: str
 
-    def _headers(self) -> dict[str, str]:
-        return {
+    def _headers(self, accept: str | None = None) -> dict[str, str]:
+        headers = {
             "Authorization": f"Bearer {self.token}",
-            "Accept": "application/vnd.github+json",
+            "Accept": accept or "application/vnd.github+json",
             "X-GitHub-Api-Version": self.api_version,
         }
+        return headers
 
     def _request(
         self, method: str, path: str, *, json_body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    ) -> Any:
         url = f"{self.api_base}{path}"
         resp = requests.request(method, url, headers=self._headers(), json=json_body, timeout=30)
         resp.raise_for_status()
@@ -29,8 +30,29 @@ class GitHubClient:
             return resp.json()
         return {}
 
+    def _request_text(self, method: str, path: str, accept: str) -> str:
+        url = f"{self.api_base}{path}"
+        resp = requests.request(method, url, headers=self._headers(accept), timeout=30)
+        resp.raise_for_status()
+        return resp.text or ""
+
     def get_issue(self, repo: str, issue_number: int) -> dict[str, Any]:
         return self._request("GET", f"/repos/{repo}/issues/{issue_number}")
+
+    def get_pr(self, repo: str, pr_number: int) -> dict[str, Any]:
+        return self._request("GET", f"/repos/{repo}/pulls/{pr_number}")
+
+    def get_pr_files(self, repo: str, pr_number: int) -> list[dict[str, Any]]:
+        return self._request("GET", f"/repos/{repo}/pulls/{pr_number}/files?per_page=100")
+
+    def get_pr_diff(self, repo: str, pr_number: int) -> str:
+        return self._request_text("GET", f"/repos/{repo}/pulls/{pr_number}", "application/vnd.github.v3.diff")
+
+    def get_commit_status(self, repo: str, sha: str) -> dict[str, Any]:
+        return self._request("GET", f"/repos/{repo}/commits/{sha}/status")
+
+    def get_check_runs(self, repo: str, sha: str) -> dict[str, Any]:
+        return self._request("GET", f"/repos/{repo}/commits/{sha}/check-runs")
 
     def create_pr(self, repo: str, base: str, head: str, title: str, body: str) -> dict[str, Any]:
         return self._request(

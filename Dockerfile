@@ -5,8 +5,10 @@ WORKDIR /app
 COPY pyproject.toml README.md /app/
 COPY src /app/src
 
-RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep ca-certificates curl \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  git ripgrep ca-certificates curl nodejs npm \
   && rm -rf /var/lib/apt/lists/*
+RUN npm install -g @ast-grep/cli
 RUN pip install --no-cache-dir -e ".[dev]"
 
 EXPOSE 8000

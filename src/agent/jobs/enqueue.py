@@ -11,7 +11,12 @@ def _repo_full_name(payload: dict[str, Any]) -> str | None:
 
 
 def enqueue_from_event(
-    conn, *, event: str, payload: dict[str, Any], delivery_id: str
+    conn,
+    *,
+    event: str,
+    payload: dict[str, Any],
+    delivery_id: str,
+    retry_labels: list[str] | None = None,
 ) -> int | None:
     if event == "issues":
         action = payload.get("action")
@@ -29,6 +34,40 @@ def enqueue_from_event(
 
     if event == "pull_request":
         action = payload.get("action")
+        if action == "labeled":
+            label = (payload.get("label") or {}).get("name", "")
+            if retry_labels and label in retry_labels:
+                pr = payload.get("pull_request") or {}
+                pr_number = pr.get("number")
+                head_sha = (pr.get("head") or {}).get("sha")
+                repo = _repo_full_name(payload)
+                if not (repo and pr_number and head_sha):
+                    return None
+                if db.has_active_job(conn, kind="fix", repo=repo, pr_number=int(pr_number)):
+                    return None
+                iter_num = db.get_iteration_count(
+                    conn, repo=repo, issue_number=None, pr_number=int(pr_number)
+                ) + 1
+                db.set_iteration_status(
+                    conn,
+                    repo=repo,
+                    issue_number=None,
+                    pr_number=int(pr_number),
+                    iter_num=iter_num,
+                    status="queued",
+                )
+                payload["agent_force_retry"] = True
+                return db.enqueue_job(
+                    conn,
+                    kind="fix",
+                    payload=payload,
+                    repo=repo,
+                    pr_number=pr_number,
+                    head_sha=head_sha,
+                    iter_num=iter_num,
+                    delivery_id=delivery_id,
+                )
+            return None
         if action not in {"opened", "synchronize"}:
             return None
         pr = payload.get("pull_request") or {}

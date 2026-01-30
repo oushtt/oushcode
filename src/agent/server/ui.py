@@ -141,7 +141,7 @@ def render_ui(
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Agent Console</title>
+<title>OushCode Console</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Chivo+Mono:wght@300;500&display=swap');
 :root {{

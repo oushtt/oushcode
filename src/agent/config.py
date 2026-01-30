@@ -38,6 +38,8 @@ class Config:
     agent_temperature: float
     agent_tool_timeout_sec: int
     agent_allow_shell: bool
+    agent_max_iters: int
+    agent_retry_labels: list[str]
 
     @staticmethod
     def load() -> "Config":
@@ -52,6 +54,11 @@ class Config:
             value = os.getenv(name, "1" if default else "0").strip().lower()
             return value in {"1", "true", "yes", "on"}
 
+        retry_labels = [
+            label.strip()
+            for label in os.getenv("AGENT_RETRY_LABELS", "agent:retry,retry").split(",")
+            if label.strip()
+        ]
         return Config(
             env=os.getenv("APP_ENV", "dev"),
             database_path=os.getenv("DATABASE_PATH", "./data/agent.db"),
@@ -78,4 +85,6 @@ class Config:
             agent_temperature=float(os.getenv("AGENT_TEMPERATURE", "0.2")),
             agent_tool_timeout_sec=_get_int("AGENT_TOOL_TIMEOUT_SEC", 120),
             agent_allow_shell=_get_bool("AGENT_ALLOW_SHELL", False),
+            agent_max_iters=_get_int("AGENT_MAX_ITERS", 3),
+            agent_retry_labels=retry_labels,
         )

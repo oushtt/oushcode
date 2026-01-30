@@ -45,6 +45,12 @@ def set_origin(repo_url: str, cwd: str) -> None:
 def create_branch(branch: str, cwd: str) -> None:
     run_git(["checkout", "-b", branch], cwd=cwd)
 
+def checkout_ref(ref: str, cwd: str) -> None:
+    run_git(["checkout", ref], cwd=cwd)
+
+def checkout_remote_branch(branch: str, cwd: str) -> None:
+    run_git(["checkout", "-B", branch, f"origin/{branch}"], cwd=cwd)
+
 
 def add_all_and_commit(message: str, cwd: str, env: dict[str, str]) -> None:
     run_git(["add", "-A"], cwd=cwd, env=env)
@@ -57,4 +63,3 @@ def push_branch(branch: str, cwd: str, env: dict[str, str]) -> None:
 
 def git_status_porcelain(cwd: str) -> str:
     return run_git_output(["status", "--porcelain"], cwd=cwd)
-

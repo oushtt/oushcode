@@ -5,7 +5,7 @@ import time
 
 from agent.config import Config
 from agent.artifacts.job_log import JobLogger
-from agent.jobs.handlers import handle_issue_job, handle_review_job
+from agent.jobs.handlers import handle_issue_job, handle_review_job, handle_fix_job
 from agent.storage import db
 
 logger = logging.getLogger("agent.worker")
@@ -51,6 +51,8 @@ def run_worker(cfg: Config) -> None:
             )
             if job.kind == "issue":
                 handle_issue_job(cfg, job, job_log)
+            elif job.kind == "fix":
+                handle_fix_job(cfg, job, job_log)
             elif job.kind == "review":
                 handle_review_job(cfg, job, job_log)
             else:

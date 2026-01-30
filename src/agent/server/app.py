@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
             event=event,
             payload=payload,
             delivery_id=delivery_id,
+            retry_labels=cfg.agent_retry_labels,
         )
         db.mark_delivery(conn, delivery_id)
         return {"status": "accepted", "job_id": job_id}
