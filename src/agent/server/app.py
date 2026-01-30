@@ -34,10 +34,15 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/ui", response_class=HTMLResponse)
-    def ui(job_id: int | None = None) -> HTMLResponse:
+    def ui(job_id: int | None = None, status: str | None = "all") -> HTMLResponse:
         jobs = list(db.list_jobs(conn))
         selected = db.get_job(conn, job_id) if job_id else None
-        html = render_ui(jobs=jobs, selected=selected, artifacts_dir=cfg.artifacts_dir)
+        html = render_ui(
+            jobs=jobs,
+            selected=selected,
+            artifacts_dir=cfg.artifacts_dir,
+            status_filter=status,
+        )
         return HTMLResponse(content=html)
 
     @app.post("/webhook")

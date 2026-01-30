@@ -47,8 +47,11 @@ def render_ui(
     jobs: Iterable[Job],
     selected: Job | None,
     artifacts_dir: str,
+    status_filter: str | None = None,
 ) -> str:
     jobs_list = list(jobs)
+    if status_filter and status_filter != "all":
+        jobs_list = [j for j in jobs_list if j.status == status_filter]
     jobs_list.sort(key=lambda j: j.id, reverse=True)
 
     selected_job = selected or (jobs_list[0] if jobs_list else None)
@@ -66,6 +69,18 @@ def render_ui(
             "failed": "badge failed",
         }.get(status, "badge")
         return f"<span class=\"{cls}\">{esc(status)}</span>"
+
+    def filter_link(label: str, value: str) -> str:
+        cls = "filter active" if status_filter == value else "filter"
+        return f"<a class=\"{cls}\" href=\"/ui?status={value}\">{label}</a>"
+
+    filters_html = (
+        filter_link("All", "all")
+        + filter_link("Queued", "queued")
+        + filter_link("Running", "running")
+        + filter_link("Done", "done")
+        + filter_link("Failed", "failed")
+    )
 
     jobs_html = "".join(
         [
@@ -182,6 +197,31 @@ body {{
   max-height: calc(100vh - 120px);
   overflow: auto;
 }}
+.filters {{
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #1f2a3b;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 2;
+}}
+.filter {{
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid #2a3344;
+  padding: 4px 8px;
+  border-radius: 999px;
+  text-decoration: none;
+}}
+.filter.active {{
+  color: #111827;
+  background: var(--accent);
+  border-color: #62411f;
+}}
 .job {{
   display: block;
   text-decoration: none;
@@ -284,6 +324,9 @@ body {{
   </div>
   <div class="layout">
     <div class="panel queue">
+      <div class="filters">
+        {filters_html}
+      </div>
       {jobs_html if jobs_html else '<div class="job">No jobs yet</div>'}
     </div>
     <div class="content">
