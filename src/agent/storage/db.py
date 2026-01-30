@@ -11,6 +11,8 @@ from typing import Any, Iterable
 @dataclass(frozen=True)
 class Job:
     id: int
+    created_at: str
+    updated_at: str
     kind: str
     status: str
     payload: dict[str, Any]
@@ -183,6 +185,8 @@ def fetch_next_job(conn: sqlite3.Connection) -> Job | None:
         return None
     return Job(
         id=row["id"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
         kind=row["kind"],
         status=row["status"],
         payload=json.loads(row["payload"]),
@@ -235,6 +239,8 @@ def list_jobs(conn: sqlite3.Connection, status: str | None = None) -> Iterable[J
     for row in cur.fetchall():
         yield Job(
             id=row["id"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
             kind=row["kind"],
             status=row["status"],
             payload=json.loads(row["payload"]),
@@ -244,3 +250,23 @@ def list_jobs(conn: sqlite3.Connection, status: str | None = None) -> Iterable[J
             head_sha=row["head_sha"],
             iter=row["iter"],
         )
+
+
+def get_job(conn: sqlite3.Connection, job_id: int) -> Job | None:
+    cur = conn.execute("SELECT * FROM jobs WHERE id = ? LIMIT 1", (job_id,))
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return Job(
+        id=row["id"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        kind=row["kind"],
+        status=row["status"],
+        payload=json.loads(row["payload"]),
+        repo=row["repo"],
+        issue_number=row["issue_number"],
+        pr_number=row["pr_number"],
+        head_sha=row["head_sha"],
+        iter=row["iter"],
+    )

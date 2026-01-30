@@ -5,9 +5,11 @@ import hashlib
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
 
 from agent.config import Config
 from agent.jobs.enqueue import enqueue_from_event
+from agent.server.ui import render_ui
 from agent.storage import db
 
 
@@ -30,6 +32,13 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/ui", response_class=HTMLResponse)
+    def ui(job_id: int | None = None) -> HTMLResponse:
+        jobs = list(db.list_jobs(conn))
+        selected = db.get_job(conn, job_id) if job_id else None
+        html = render_ui(jobs=jobs, selected=selected, artifacts_dir=cfg.artifacts_dir)
+        return HTMLResponse(content=html)
 
     @app.post("/webhook")
     async def webhook(request: Request) -> dict[str, Any]:
