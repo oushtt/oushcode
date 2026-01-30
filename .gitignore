@@ -1,5 +1,6 @@
 .env
 .env.*
+*.pem
 !.env.example
 __pycache__/
 *.pyc
@@ -27,3 +28,4 @@ dist/
 docs/*
 
 secrets/*
+.env

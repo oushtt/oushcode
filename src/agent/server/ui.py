@@ -145,29 +145,29 @@ def render_ui(
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Chivo+Mono:wght@300;500&display=swap');
 :root {{
-  --bg: #0c1015;
-  --panel: #121824;
-  --panel-2: #0e141e;
-  --accent: #ffb454;
-  --accent-2: #7bf1a8;
-  --muted: #9aa4b2;
-  --text: #e6edf3;
-  --danger: #ff6b6b;
-  --warn: #ffd166;
-  --ok: #7bf1a8;
-  --shadow: rgba(0,0,0,0.35);
+  --bg: #f3f5f8;
+  --panel: #ffffff;
+  --panel-2: #f7f8fb;
+  --accent: #f59e0b;
+  --accent-2: #10b981;
+  --muted: #6b7280;
+  --text: #111827;
+  --danger: #dc2626;
+  --warn: #f59e0b;
+  --ok: #16a34a;
+  --shadow: rgba(15,23,42,0.12);
 }}
 * {{ box-sizing: border-box; }}
 body {{
   margin: 0;
   color: var(--text);
-  background: radial-gradient(1200px 800px at 10% -10%, #1a2331 0%, #0c1015 60%);
+  background: radial-gradient(1200px 800px at 10% -10%, #ffffff 0%, #f3f5f8 60%);
   font-family: 'Chivo Mono', monospace;
 }}
 .header {{
   padding: 24px 28px;
-  border-bottom: 1px solid #202938;
-  background: linear-gradient(90deg, #121824 0%, #0e141e 60%);
+  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(90deg, #ffffff 0%, #f3f5f8 60%);
 }}
 .title {{
   font-family: 'Fraunces', serif;
@@ -186,7 +186,7 @@ body {{
 }}
 .panel {{
   background: var(--panel);
-  border: 1px solid #1f2a3b;
+  border: 1px solid #e5e7eb;
   border-radius: 16px;
   box-shadow: 0 12px 30px var(--shadow);
   overflow: hidden;
@@ -201,7 +201,7 @@ body {{
   display: flex;
   gap: 8px;
   padding: 12px 14px;
-  border-bottom: 1px solid #1f2a3b;
+  border-bottom: 1px solid #e5e7eb;
   position: sticky;
   top: 0;
   background: var(--panel);
@@ -212,7 +212,7 @@ body {{
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-  border: 1px solid #2a3344;
+  border: 1px solid #d1d5db;
   padding: 4px 8px;
   border-radius: 999px;
   text-decoration: none;
@@ -220,17 +220,17 @@ body {{
 .filter.active {{
   color: #111827;
   background: var(--accent);
-  border-color: #62411f;
+  border-color: #d97706;
 }}
 .job {{
   display: block;
   text-decoration: none;
   color: inherit;
   padding: 14px 16px;
-  border-bottom: 1px solid #1f2a3b;
+  border-bottom: 1px solid #e5e7eb;
   transition: background 0.2s ease;
 }}
-.job:hover {{ background: #182233; }}
+.job:hover {{ background: #f3f4f6; }}
 .job-head {{
   display: flex;
   justify-content: space-between;
@@ -250,13 +250,13 @@ body {{
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 10px;
-  border: 1px solid #2a3344;
+  border: 1px solid #d1d5db;
   text-transform: uppercase;
 }}
-.badge.queued {{ color: var(--warn); border-color: #4a3f1e; }}
-.badge.running {{ color: var(--accent); border-color: #4a3419; }}
-.badge.done {{ color: var(--ok); border-color: #1f4d2f; }}
-.badge.failed {{ color: var(--danger); border-color: #4a1e1e; }}
+.badge.queued {{ color: var(--warn); border-color: #f59e0b; }}
+.badge.running {{ color: var(--accent); border-color: #f59e0b; }}
+.badge.done {{ color: var(--ok); border-color: #16a34a; }}
+.badge.failed {{ color: var(--danger); border-color: #dc2626; }}
 .content {{
   display: grid;
   grid-template-rows: auto 1fr;
@@ -265,7 +265,7 @@ body {{
 .selected {{
   padding: 18px;
   background: var(--panel-2);
-  border: 1px solid #202938;
+  border: 1px solid #e5e7eb;
   border-radius: 16px;
 }}
 .selected-title {{
@@ -288,8 +288,8 @@ body {{
 .box {{
   padding: 16px;
   border-radius: 16px;
-  border: 1px solid #1f2a3b;
-  background: #101724;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
   min-height: 240px;
   overflow: hidden;
   display: flex;
@@ -304,7 +304,7 @@ body {{
 }}
 .event {{
   padding: 10px 0;
-  border-bottom: 1px dashed #223146;
+  border-bottom: 1px dashed #e5e7eb;
 }}
 .event-meta {{ color: var(--muted); font-size: 10px; }}
 .event-msg {{ font-size: 12px; margin-top: 4px; }}
@@ -312,6 +312,11 @@ body {{
   white-space: pre-wrap;
   font-size: 12px;
   line-height: 1.5;
+  overflow: auto;
+  padding-right: 8px;
+  flex: 1;
+}}
+.events-list {{
   overflow: auto;
   padding-right: 8px;
   flex: 1;
@@ -328,7 +333,7 @@ body {{
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-  border: 1px solid #2a3344;
+  border: 1px solid #d1d5db;
   padding: 4px 8px;
   border-radius: 999px;
   background: transparent;
@@ -337,7 +342,7 @@ body {{
 .copy-btn:hover {{
   color: #111827;
   background: var(--accent);
-  border-color: #62411f;
+  border-color: #d97706;
 }}
 @media (max-width: 980px) {{
   .layout {{ grid-template-columns: 1fr; }}
@@ -369,7 +374,7 @@ body {{
     }}
   </script>
   <div class="header">
-    <div class="title">Agent Console</div>
+    <div class="title">OushCode Console</div>
     <div class="subtitle">Queue · Jobs · Artifacts</div>
   </div>
   <div class="layout">
@@ -393,7 +398,9 @@ body {{
           <div class="box-header">
             <h3>Events</h3>
           </div>
-          {events_html if events_html else '<div class="event">No events yet</div>'}
+          <div class="events-list">
+            {events_html if events_html else '<div class="event">No events yet</div>'}
+          </div>
         </div>
       </div>
     </div>

@@ -1,0 +1,16 @@
+{
+  "repository": {
+    "full_name": "octo-org/octo-repo"
+  },
+  "pull_request": {
+    "number": 123,
+    "head": {
+      "sha": "1111111111111111111111111111111111111111"
+    }
+  },
+  "ci": {
+    "status": "success",
+    "name": "ci",
+    "url": "https://ci.example.com/build/123"
+  }
+}

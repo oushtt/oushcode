@@ -16,6 +16,17 @@ def run_git_output(args: Iterable[str], cwd: str) -> str:
     output = (result.stdout or "") + ("\n" + result.stderr if result.stderr else "")
     return output.strip()
 
+
+def discard_tracked_path(path: str, cwd: str, ref: str | None = None) -> None:
+    if ref:
+        tracked = run_git_output(["ls-tree", "-r", ref, "--", path], cwd=cwd)
+        if tracked:
+            run_git(["checkout", ref, "--", path], cwd=cwd)
+        return
+    tracked = run_git_output(["ls-files", "--", path], cwd=cwd)
+    if tracked:
+        run_git(["checkout", "--", path], cwd=cwd)
+
 def clone_repo(repo_url: str, dest: str) -> None:
     parent = os.path.dirname(dest)
     os.makedirs(parent, exist_ok=True)

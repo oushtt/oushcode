@@ -21,6 +21,7 @@ from agent.tools.git_ops import (
     checkout_remote_branch,
     clone_from_mirror,
     create_branch,
+    discard_tracked_path,
     ensure_mirror,
     git_status_porcelain,
     push_branch,
@@ -118,6 +119,10 @@ def handle_issue_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
         issue_body=str(issue_data.get("body", "")),
         job_log=job_log,
     )
+    notes_dir = os.path.join(workdir, "agent_notes")
+    if os.path.isdir(notes_dir):
+        shutil.rmtree(notes_dir)
+    discard_tracked_path("agent_notes", workdir)
 
     status = git_status_porcelain(workdir)
     status_lines = [line.strip() for line in status.splitlines() if line.strip()]
@@ -188,6 +193,7 @@ def handle_fix_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
 
     pr_data = gh.get_pr(repo, int(pr_number))
     pr_body = pr_data.get("body") or ""
+    base_ref = (pr_data.get("base") or {}).get("ref") or ""
     head_ref = (pr_data.get("head") or {}).get("ref") or ""
     head_sha = job.head_sha or (pr_data.get("head") or {}).get("sha") or ""
 
@@ -255,17 +261,58 @@ def handle_fix_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
         job_log.event("tool", "git.checkout", {"ref": head_sha})
         checkout_ref(head_sha, workdir)
 
+    reviewer_hint = payload.get("agent_review") or {}
+    review_summary = str(reviewer_hint.get("summary", "")).strip()
+    review_ci = str(reviewer_hint.get("ci", "")).strip()
+    review_findings = reviewer_hint.get("findings", [])
+    restore_notes = False
+    if isinstance(review_findings, list):
+        for item in review_findings:
+            if isinstance(item, dict):
+                file = str(item.get("file", ""))
+            else:
+                file = str(item)
+            if file.startswith("agent_notes/"):
+                restore_notes = True
+                break
+    review_lines: list[str] = []
+    if review_summary:
+        review_lines.append(f"- Summary: {review_summary}")
+    if review_ci:
+        review_lines.append(f"- CI: {review_ci}")
+    if isinstance(review_findings, list) and review_findings:
+        review_lines.append("- Findings:")
+        for item in review_findings:
+            if isinstance(item, dict):
+                note = item.get("note", "")
+                file = item.get("file", "-")
+                review_lines.append(f"  - {file}: {note}")
+            elif isinstance(item, str):
+                review_lines.append(f"  - {item}")
+    review_block = "\n".join(review_lines).strip()
+    fix_body = issue_body
+    if review_block:
+        fix_body = f"{issue_body}\n\nReviewer feedback:\n{review_block}"
+
     agent_result = run_code_agent(
         cfg=cfg,
         repo_path=workdir,
         issue_title=str(issue_title),
-        issue_body=str(issue_body),
+        issue_body=str(fix_body),
         job_log=job_log,
     )
+    notes_dir = os.path.join(workdir, "agent_notes")
+    if os.path.isdir(notes_dir):
+        shutil.rmtree(notes_dir)
+    notes_ref = f"origin/{base_ref}" if (restore_notes and base_ref) else None
+    discard_tracked_path("agent_notes", workdir, notes_ref)
 
     status = git_status_porcelain(workdir)
     status_lines = [line.strip() for line in status.splitlines() if line.strip()]
-    non_note_changes = [line for line in status_lines if "agent_notes/" not in line]
+    if restore_notes:
+        non_note_changes = status_lines
+    else:
+        non_note_changes = [line for line in status_lines if "agent_notes/" not in line]
     if not non_note_changes:
         db.set_iteration_status(
             conn,
@@ -414,7 +461,6 @@ def handle_review_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
         """
     ).strip()
 
-    gh.post_comment(repo, int(pr_number), body)
     try:
         if decision == "ok" and ci_lower in {"success", "passed", "ok"}:
             gh.post_review(repo, int(pr_number), body, "APPROVE")
@@ -423,7 +469,7 @@ def handle_review_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
     except Exception as exc:  # noqa: BLE001
         logger.info("Review submission skipped: %s", exc)
     job_log.section("Reviewer Output", body)
-    logger.info("Posted review comment for pr=%s", pr_number)
+    logger.info("Posted review for pr=%s", pr_number)
 
     if decision != "ok":
         conn = db.connect(cfg.database_path)
@@ -439,10 +485,16 @@ def handle_review_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
                 iter_num=iter_num,
                 status="queued",
             )
+            fix_payload = dict(payload)
+            fix_payload["agent_review"] = {
+                "summary": summary,
+                "ci": ci,
+                "findings": findings,
+            }
             db.enqueue_job(
                 conn,
                 kind="fix",
-                payload=payload,
+                payload=fix_payload,
                 repo=repo,
                 pr_number=pr_number,
                 head_sha=head_sha,
