@@ -4,7 +4,7 @@ import json
 import os
 import fnmatch
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from agent.artifacts.job_log import JobLogger
@@ -13,10 +13,42 @@ from agent.llm.openrouter import OpenRouterClient
 
 
 @dataclass
+class TodoItem:
+    id: int
+    text: str
+    status: str = "pending"
+
+
+@dataclass
+class TodoState:
+    items: list[TodoItem] = field(default_factory=list)
+    next_id: int = 1
+
+    def reset(self, items: list[str]) -> list[TodoItem]:
+        self.items = []
+        self.next_id = 1
+        for text in items:
+            self.items.append(TodoItem(id=self.next_id, text=text))
+            self.next_id += 1
+        return self.items
+
+    def as_dicts(self) -> list[dict[str, str | int]]:
+        return [{"id": i.id, "text": i.text, "status": i.status} for i in self.items]
+
+    def set_status(self, item_id: int, status: str) -> bool:
+        for item in self.items:
+            if item.id == item_id:
+                item.status = status
+                return True
+        return False
+
+
+@dataclass
 class ToolContext:
     repo_path: str
     cfg: Config
     job_log: JobLogger
+    todo: TodoState
 
 
 ToolHandler = Callable[[dict[str, Any], ToolContext], str]
@@ -52,7 +84,20 @@ def tool_list_files(args: dict[str, Any], ctx: ToolContext) -> str:
     max_results = int(args.get("max_results", 200))
     entries: list[str] = []
     for root, dirs, files in os.walk(ctx.repo_path):
-        dirs[:] = [d for d in dirs if d not in {".git", ".venv", "__pycache__"}]
+        dirs[:] = [
+            d
+            for d in dirs
+            if d
+            not in {
+                ".git",
+                ".venv",
+                "__pycache__",
+                "agent_notes",
+                "artifacts",
+                "data",
+                "workdir",
+            }
+        ]
         for name in files:
             rel = os.path.relpath(os.path.join(root, name), ctx.repo_path)
             if pattern and not fnmatch.fnmatch(rel, pattern):
@@ -70,6 +115,20 @@ def tool_repo_tree(args: dict[str, Any], ctx: ToolContext) -> str:
     lines: list[str] = []
     base_depth = ctx.repo_path.rstrip(os.sep).count(os.sep)
     for root, dirs, files in os.walk(ctx.repo_path):
+        dirs[:] = [
+            d
+            for d in dirs
+            if d
+            not in {
+                ".git",
+                ".venv",
+                "__pycache__",
+                "agent_notes",
+                "artifacts",
+                "data",
+                "workdir",
+            }
+        ]
         depth = root.count(os.sep) - base_depth
         if depth > max_depth:
             dirs[:] = []
@@ -170,7 +229,7 @@ def tool_run_pytest(args: dict[str, Any], ctx: ToolContext) -> str:
     if target:
         cmd.append(target)
     env = os.environ.copy()
-    env["PYTHONPATH"] = f\"{env.get('PYTHONPATH','')}:{os.path.join(ctx.repo_path, 'src')}\"
+    env["PYTHONPATH"] = f"{env.get('PYTHONPATH','')}:{os.path.join(ctx.repo_path, 'src')}"
     try:
         result = subprocess.run(
             cmd,
@@ -216,6 +275,28 @@ def tool_write_file(args: dict[str, Any], ctx: ToolContext) -> str:
     return "file written"
 
 
+def tool_todo_init(args: dict[str, Any], ctx: ToolContext) -> str:
+    items = args.get("items")
+    if not isinstance(items, list):
+        raise ValueError("items must be a list of strings")
+    texts = [str(i) for i in items]
+    ctx.todo.reset(texts)
+    return json.dumps(ctx.todo.as_dicts(), ensure_ascii=True)
+
+
+def tool_todo_list(_: dict[str, Any], ctx: ToolContext) -> str:
+    return json.dumps(ctx.todo.as_dicts(), ensure_ascii=True)
+
+
+def tool_todo_set(args: dict[str, Any], ctx: ToolContext) -> str:
+    item_id = int(args.get("id", 0))
+    status = str(args.get("status", "pending"))
+    if not item_id:
+        raise ValueError("id is required")
+    ok = ctx.todo.set_status(item_id, status)
+    return "ok" if ok else "not found"
+
+
 def build_tools(cfg: Config) -> dict[str, ToolHandler]:
     tools: dict[str, ToolHandler] = {
         "list_files": tool_list_files,
@@ -231,6 +312,9 @@ def build_tools(cfg: Config) -> dict[str, ToolHandler]:
         "run_ruff": tool_run_ruff,
         "run_mypy": tool_run_mypy,
         "write_file": tool_write_file,
+        "todo_init": tool_todo_init,
+        "todo_list": tool_todo_list,
+        "todo_set": tool_todo_set,
     }
     if cfg.agent_allow_shell:
         tools["run_shell"] = tool_run_shell
@@ -271,7 +355,6 @@ def run_code_agent(
         max_tokens=cfg.openrouter_max_tokens,
     )
     tools = build_tools(cfg)
-    tool_ctx = ToolContext(repo_path=repo_path, cfg=cfg, job_log=job_log)
 
     tool_lines = [
             "- list_files {pattern?(glob), max_results?}",
@@ -287,6 +370,9 @@ def run_code_agent(
             "- run_pytest {target?}",
             "- run_ruff {}",
             "- run_mypy {target?}",
+            "- todo_init {items}",
+            "- todo_list {}",
+            "- todo_set {id, status}",
     ]
     if cfg.agent_allow_shell:
         tool_lines.append("- run_shell {command}")
@@ -309,11 +395,16 @@ def run_code_agent(
         "   +new line\n"
         "7) Do NOT commit or push.\n"
         "8) Prefer apply_patch or write_file over run_shell.\n"
+        "9) If helpful, create a TODO list using todo_init and keep it updated.\n"
+        "10) Before final, verify your changes match the issue and mention this in summary.\n"
     )
     user = (
         f"Issue title: {issue_title}\n\nIssue body:\n{issue_body}\n\n"
         f"Available tools:\n{tool_list}"
     )
+
+    todo_state = TodoState()
+    tool_ctx = ToolContext(repo_path=repo_path, cfg=cfg, job_log=job_log, todo=todo_state)
 
     messages = [
         {"role": "system", "content": system},
@@ -322,6 +413,7 @@ def run_code_agent(
 
     job_log.section("Agent Input", f"Title: {issue_title}\n\n{issue_body}")
 
+    patch_failures = 0
     for step in range(cfg.agent_max_steps):
         response = llm.chat(messages, temperature=cfg.agent_temperature)
         content = response["choices"][0]["message"]["content"]
@@ -363,6 +455,16 @@ def run_code_agent(
             result = tools[tool_name](args, tool_ctx)
         except Exception as exc:  # noqa: BLE001
             result = f"tool error: {exc}"
+        if tool_name == "apply_patch" and "patch" in args:
+            if "corrupt patch" in result or "apply failed" in result or "unified diff" in result:
+                patch_failures += 1
+                if patch_failures >= 2:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "apply_patch failed twice. Use write_file instead.",
+                        }
+                    )
         result = _truncate(result, cfg.agent_max_tool_output_chars)
         job_log.section(f"Tool: {tool_name}", result or "(no output)")
         messages.append({"role": "assistant", "content": content})

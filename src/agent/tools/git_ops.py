@@ -57,3 +57,4 @@ def push_branch(branch: str, cwd: str, env: dict[str, str]) -> None:
 
 def git_status_porcelain(cwd: str) -> str:
     return run_git_output(["status", "--porcelain"], cwd=cwd)
+

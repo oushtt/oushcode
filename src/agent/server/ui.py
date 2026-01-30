@@ -281,8 +281,9 @@ body {{
 .dot {{ color: var(--accent); padding: 0 6px; }}
 .grid {{
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.2fr 0.8fr;
   gap: 12px;
+  height: calc(100vh - 220px);
 }}
 .box {{
   padding: 16px;
@@ -290,7 +291,9 @@ body {{
   border: 1px solid #1f2a3b;
   background: #101724;
   min-height: 240px;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }}
 .box h3 {{
   margin: 0 0 10px 0;
@@ -309,6 +312,32 @@ body {{
   white-space: pre-wrap;
   font-size: 12px;
   line-height: 1.5;
+  overflow: auto;
+  padding-right: 8px;
+  flex: 1;
+}}
+.box-header {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}}
+.copy-btn {{
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid #2a3344;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}}
+.copy-btn:hover {{
+  color: #111827;
+  background: var(--accent);
+  border-color: #62411f;
 }}
 @media (max-width: 980px) {{
   .layout {{ grid-template-columns: 1fr; }}
@@ -318,6 +347,27 @@ body {{
 </style>
 </head>
 <body>
+  <script>
+    const autoRefresh = true;
+    if (autoRefresh) {{
+      setInterval(() => {{
+        const url = new URL(window.location.href);
+        fetch(url.toString(), {{ headers: {{ "X-UI-Refresh": "1" }} }})
+          .then(r => r.text())
+          .then(html => {{
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            const nextQueue = doc.querySelector(".queue");
+            const nextContent = doc.querySelector(".content");
+            if (nextQueue && nextContent) {{
+              document.querySelector(".queue").innerHTML = nextQueue.innerHTML;
+              document.querySelector(".content").innerHTML = nextContent.innerHTML;
+            }}
+          }})
+          .catch(() => {{}});
+      }}, 5000);
+    }}
+  </script>
   <div class="header">
     <div class="title">Agent Console</div>
     <div class="subtitle">Queue · Jobs · Artifacts</div>
@@ -333,16 +383,27 @@ body {{
       {selected_block}
       <div class="grid">
         <div class="box">
-          <h3>Transcript</h3>
+          <div class="box-header">
+            <h3>Transcript</h3>
+            <button class="copy-btn" onclick="copyTranscript()">Copy</button>
+          </div>
           {transcript_html}
         </div>
         <div class="box">
-          <h3>Events</h3>
+          <div class="box-header">
+            <h3>Events</h3>
+          </div>
           {events_html if events_html else '<div class="event">No events yet</div>'}
         </div>
       </div>
     </div>
   </div>
+  <script>
+    function copyTranscript() {{
+      const text = document.querySelector('.transcript')?.innerText || '';
+      navigator.clipboard.writeText(text);
+    }}
+  </script>
 </body>
 </html>
 """
