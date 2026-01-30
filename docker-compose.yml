@@ -3,8 +3,8 @@ services:
     build: .
     command: ["agent", "server", "--host", "0.0.0.0", "--port", "8000"]
     env_file: .env
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
       - ./data:/app/data
       - ./artifacts:/app/artifacts
@@ -18,3 +18,22 @@ services:
       - ./data:/app/data
       - ./artifacts:/app/artifacts
       - ./secrets:/app/secrets:ro
+    depends_on:
+      - server
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+
+volumes:
+  caddy_data:
+  caddy_config:
