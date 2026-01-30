@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+"""FastAPI application that receives GitHub webhooks and serves a minimal UI.
+
+This service is intentionally simple:
+- Validate webhook authenticity (HMAC signature).
+- Deduplicate deliveries (GitHub may retry).
+- Enqueue work into SQLite for the background worker.
+"""
+
 import hmac
 import hashlib
 from typing import Any
@@ -14,6 +22,8 @@ from agent.storage import db
 
 
 def _verify_signature(secret: str, body: bytes, signature: str) -> bool:
+    # GitHub sends the raw request body and a SHA256 HMAC in X-Hub-Signature-256.
+    # If secret is empty (dev mode), signature verification is skipped.
     if not secret:
         return True
     if not signature or not signature.startswith("sha256="):
@@ -47,14 +57,19 @@ def create_app() -> FastAPI:
 
     @app.post("/webhook")
     async def webhook(request: Request) -> dict[str, Any]:
+        # We keep the endpoint GitHub-compatible (headers + signature format), but we also
+        # allow a custom event type (e.g. "ci_completed") for external CI integrations.
         event = request.headers.get("X-GitHub-Event", "")
         delivery_id = request.headers.get("X-GitHub-Delivery", "")
         signature = request.headers.get("X-Hub-Signature-256", "")
         body = await request.body()
 
+        # Delivery IDs are unique per webhook attempt; GitHub may retry the same delivery.
         if db.delivery_seen(conn, delivery_id):
             return {"status": "skipped", "reason": "duplicate delivery"}
 
+        # Accept either Code Agent or Reviewer Agent app secret. This lets us host both
+        # apps behind a single webhook URL.
         if not (
             _verify_signature(cfg.code_webhook_secret, body, signature)
             or _verify_signature(cfg.reviewer_webhook_secret, body, signature)

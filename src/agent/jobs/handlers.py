@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+"""Job handlers executed by the background worker.
+
+Each handler is responsible for:
+- Fetching required GitHub context (issue/PR/CI metadata)
+- Preparing a local git workspace (mirror + clone)
+- Running the appropriate agent (code or reviewer)
+- Posting results back to GitHub and updating iteration state
+
+Handlers are intentionally imperative and side-effecting; enqueueing is kept separate.
+"""
+
 import logging
 import os
 import re
@@ -32,15 +43,18 @@ logger = logging.getLogger("agent.jobs")
 
 
 def _workdir(cfg: Config, repo: str, job_id: int) -> str:
+    # Isolate each job's workspace so concurrent runs (if ever enabled) cannot collide.
     safe = repo.replace("/", "__")
     return os.path.join(cfg.workdir_root, safe, f"job-{job_id}")
 
 def _mirror_path(cfg: Config, repo: str) -> str:
+    # Shared mirror speeds up repeated clones of the same repo and reduces network usage.
     safe = repo.replace("/", "__")
     return os.path.join(cfg.workdir_root, "cache", f"{safe}.git")
 
 
 def _git_env(cfg: Config) -> dict[str, str]:
+    # Force a stable bot identity for any commits produced by the Code Agent.
     env = os.environ.copy()
     env["GIT_AUTHOR_NAME"] = cfg.git_user_name
     env["GIT_AUTHOR_EMAIL"] = cfg.git_user_email
@@ -50,6 +64,7 @@ def _git_env(cfg: Config) -> dict[str, str]:
 
 
 def handle_issue_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
+    # Entry point: issue -> code agent -> commit -> push branch -> open PR.
     payload = job.payload
     repo = (payload.get("repository") or {}).get("full_name")
     issue = payload.get("issue") or {}
@@ -82,6 +97,7 @@ def handle_issue_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
     if os.path.exists(workdir):
         shutil.rmtree(workdir)
 
+    # Use an installation token from the Code Agent GitHub App for all repo writes.
     token_safe = quote(token, safe="")
     clone_url = f"https://x-access-token:{token_safe}@github.com/{repo}.git"
     logger.info("Updating mirror cache %s", mirror_path)
@@ -124,6 +140,7 @@ def handle_issue_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
         shutil.rmtree(notes_dir)
     discard_tracked_path("agent_notes", workdir)
 
+    # If the agent did not change anything, avoid creating noisy commits/PRs.
     status = git_status_porcelain(workdir)
     status_lines = [line.strip() for line in status.splitlines() if line.strip()]
     non_note_changes = [line for line in status_lines if "agent_notes/" not in line]
@@ -171,6 +188,7 @@ def handle_issue_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
 
 
 def handle_fix_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
+    # Fix cycle: take reviewer feedback + CI status and produce minimal additional commits.
     payload = job.payload
     repo = job.repo or (payload.get("repository") or {}).get("full_name")
     pr = payload.get("pull_request") or {}
@@ -208,6 +226,7 @@ def handle_fix_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
         issue_body = str(issue.get("body", ""))
 
     conn = db.connect(cfg.database_path)
+    # Iterations are capped to prevent infinite loops.
     iter_num = job.iter if job.iter else db.get_iteration_count(
         conn, repo=repo, issue_number=issue_number, pr_number=int(pr_number)
     ) + 1
@@ -261,6 +280,7 @@ def handle_fix_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
         job_log.event("tool", "git.checkout", {"ref": head_sha})
         checkout_ref(head_sha, workdir)
 
+    # Pass reviewer output to the Code Agent as additional context.
     reviewer_hint = payload.get("agent_review") or {}
     review_summary = str(reviewer_hint.get("summary", "")).strip()
     review_ci = str(reviewer_hint.get("ci", "")).strip()
@@ -310,6 +330,7 @@ def handle_fix_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
     status = git_status_porcelain(workdir)
     status_lines = [line.strip() for line in status.splitlines() if line.strip()]
     if restore_notes:
+        # If reviewer flagged tracked files under agent_notes/, allow a cleanup commit.
         non_note_changes = status_lines
     else:
         non_note_changes = [line for line in status_lines if "agent_notes/" not in line]
@@ -361,6 +382,7 @@ def handle_fix_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
 
 
 def handle_review_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
+    # Review cycle: after CI completion, run the reviewer agent and post review to the PR.
     payload = job.payload
     repo = (payload.get("repository") or {}).get("full_name")
     pr = payload.get("pull_request") or {}
@@ -390,6 +412,7 @@ def handle_review_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
 
     issue_title = ""
     issue_body = ""
+    # Optional: link PR to an Issue via "Closes #<n>" in PR body.
     match = re.search(r"(?i)closes\s+#(\d+)", pr_body)
     if match:
         issue_number = int(match.group(1))
@@ -415,6 +438,7 @@ def handle_review_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
         job_log.event("tool", "git.checkout", {"ref": head_sha})
         checkout_ref(head_sha, workdir)
 
+    # Reviewer agent uses GitHub API + local read-only repo view to produce a structured report.
     result = run_reviewer_agent(
         cfg=cfg,
         gh=gh,
@@ -472,6 +496,7 @@ def handle_review_job(cfg: Config, job: Job, job_log: JobLogger) -> None:
     logger.info("Posted review for pr=%s", pr_number)
 
     if decision != "ok":
+        # Schedule a fix job (if one is not already active) to address review/CI feedback.
         conn = db.connect(cfg.database_path)
         if not db.has_active_job(conn, kind="fix", repo=repo, pr_number=int(pr_number)):
             iter_num = db.get_iteration_count(

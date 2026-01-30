@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+"""SQLite storage for jobs, iteration state, and webhook deduplication.
+
+Design goals:
+- Idempotency: ignore duplicate webhook deliveries (GitHub retries).
+- Predictability: a single worker consumes jobs in a deterministic priority order.
+- Traceability: keep enough metadata to render UI and relate jobs to repo/issue/PR/sha.
+"""
+
 import json
 import os
 import sqlite3
@@ -41,6 +49,8 @@ def connect(db_path: str) -> sqlite3.Connection:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
+    # delivery_id is GitHub's "X-GitHub-Delivery" header. We store it to avoid enqueueing
+    # the same event multiple times if GitHub retries the webhook.
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS deliveries (
@@ -49,6 +59,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # jobs is the main queue. payload is the full webhook JSON (stored as text).
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS jobs (
@@ -68,6 +79,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # iterations track repeated fix cycles per (repo, issue/pr). Used to stop infinite loops.
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS iterations (
@@ -81,6 +93,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # review_keys deduplicates review jobs per (repo, pr, sha) to avoid re-reviewing
+    # the same commit multiple times.
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS review_keys (
@@ -174,6 +188,10 @@ def enqueue_job(
 
 
 def fetch_next_job(conn: sqlite3.Connection) -> Job | None:
+    # Priority: fix > review > issue, then FIFO by id. This keeps the loop responsive:
+    # - fix jobs unblock CI/reviews
+    # - reviews come after CI completion
+    # - issues are entry points and can be processed last
     cur = conn.execute(
         """
         SELECT * FROM jobs
@@ -208,6 +226,7 @@ def fetch_next_job(conn: sqlite3.Connection) -> Job | None:
 
 
 def update_job_status(conn: sqlite3.Connection, job_id: int, status: str, error: str | None = None) -> None:
+    # Keep status transitions explicit for the UI and troubleshooting.
     conn.execute(
         """
         UPDATE jobs

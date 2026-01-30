@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Map incoming webhook events to internal jobs.
+
+The server only enqueues work; the worker performs side effects (GitHub API, git ops).
+We try to keep enqueueing idempotent and avoid duplicate reviews for the same PR SHA.
+"""
+
 from typing import Any
 
 from agent.storage import db
@@ -57,6 +63,7 @@ def enqueue_from_event(
     delivery_id: str,
     retry_labels: list[str] | None = None,
 ) -> int | None:
+    # Issues are the entry point for the Code Agent: create PR from requirements.
     if event == "issues":
         action = payload.get("action")
         if action not in {"opened", "labeled"}:
@@ -71,6 +78,7 @@ def enqueue_from_event(
             delivery_id=delivery_id,
         )
 
+    # PR label can be used as a manual "retry" mechanism for fix cycles.
     if event == "pull_request":
         action = payload.get("action")
         if action == "labeled":
@@ -109,6 +117,7 @@ def enqueue_from_event(
             return None
         return None
 
+    # CI completion (check_suite/workflow_run) triggers the Reviewer Agent.
     if event == "check_suite":
         action = payload.get("action")
         if action != "completed":
@@ -140,6 +149,8 @@ def enqueue_from_event(
         db.mark_review(conn, repo, int(pr_number), head_sha)
         return job_id
 
+    # Optional: external CI can ping us directly at the end of the pipeline.
+    # The payload format is minimal; we only need repo/pr/head_sha to find CI status via GitHub API.
     if event == "ci_completed":
         repo = _repo_full_name(payload) or payload.get("repo")
         pr_number = _extract_pr_number(payload)
@@ -162,6 +173,7 @@ def enqueue_from_event(
         db.mark_review(conn, repo, int(pr_number), head_sha)
         return job_id
 
+    # GitHub Actions workflow_run.completed is a reliable signal for "CI finished".
     if event == "workflow_run":
         action = payload.get("action")
         if action != "completed":

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+"""Thin wrapper around git CLI operations.
+
+We centralize git calls to:
+- keep subprocess invocation consistent
+- simplify logging/allowlisting at the tool layer
+"""
+
 import os
 import subprocess
 from typing import Iterable
 
 
 def run_git(args: Iterable[str], cwd: str, env: dict[str, str] | None = None) -> None:
+    # capture_output=True keeps job logs clean; failures are raised as exceptions.
     cmd = ["git", *args]
     subprocess.run(cmd, cwd=cwd, env=env, check=True, capture_output=True, text=True)
 
@@ -18,6 +26,8 @@ def run_git_output(args: Iterable[str], cwd: str) -> str:
 
 
 def discard_tracked_path(path: str, cwd: str, ref: str | None = None) -> None:
+    # Restore tracked files back to HEAD (or a given ref). Useful for removing noise like
+    # temporary agent notes from commits without deleting the directory in the repo.
     if ref:
         tracked = run_git_output(["ls-tree", "-r", ref, "--", path], cwd=cwd)
         if tracked:

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""OpenRouter chat-completions client.
+
+We keep this client extremely small: all orchestration and safety checks live in
+the agent loops, not here.
+"""
+
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -33,6 +39,7 @@ class OpenRouterClient:
         last_error: Exception | None = None
         for _ in range(self.max_retries + 1):
             try:
+                # Use explicit JSON serialization so we control max_tokens and other settings.
                 resp = requests.post(
                     url, headers=headers, data=json.dumps(payload), timeout=self.timeout_sec
                 )

@@ -77,11 +77,32 @@ def run_reviewer_agent(
     tool_list = "\n".join(tool_list_lines() + local_tool_list)
 
     system = (
-        "You are a code reviewer. Return EXACTLY ONE JSON object per response.\n"
-        "Use tools to inspect PR, diff, CI, and local repo (read-only). Do NOT modify code.\n"
-        "For tool calls: {\"type\":\"tool\",\"tool\":\"<name>\",\"args\":{...}}\n"
-        "For final: {\"type\":\"final\",\"decision\":\"ok|fix\",\"summary\":\"...\",\"findings\":[{\"severity\":\"low|med|high\",\"file\":\"path-or-'-'\",\"note\":\"...\"}],\"ci\":\"...\"}\n"
-        "Keep findings concise. If CI failed, decision should be fix.\n"
+        "You are a meticulous senior code reviewer.\n"
+        "Be skeptical, evidence-driven, and prioritize correctness, CI health, and maintainability.\n"
+        "\n"
+        "HARD OUTPUT RULES (must follow exactly):\n"
+        "1) Return EXACTLY ONE JSON object per response.\n"
+        "2) Do NOT include any extra text or markdown.\n"
+        "3) For tool calls: {\"type\":\"tool\",\"tool\":\"<name>\",\"args\":{...}}\n"
+        "4) For final: {\"type\":\"final\",\"decision\":\"ok|fix\",\"summary\":\"...\","
+        "\"findings\":[{\"severity\":\"low|med|high\",\"file\":\"path-or-'-'\",\"note\":\"...\"}],"
+        "\"ci\":\"...\"}\n"
+        "\n"
+        "SCOPE / SAFETY:\n"
+        "5) Use tools to inspect PR, diff, CI, and local repo (read-only). Do NOT modify code.\n"
+        "\n"
+        "REVIEW WORKFLOW (thorough, not verbose):\n"
+        "6) Always check CI status for the head SHA (combined status + check runs). Summarize in ci.\n"
+        "7) Inspect PR metadata and the diff. Confirm the change matches the Issue requirements.\n"
+        "8) Look for: missing/weak tests, edge cases, correctness bugs, security issues, "
+        "performance pitfalls, and unrelated changes.\n"
+        "9) If CI failed or is inconclusive for the relevant SHA, decision should be fix.\n"
+        "10) Findings must be actionable: point to file (or '-') and describe the concrete issue.\n"
+        "\n"
+        "FINAL RESPONSE QUALITY:\n"
+        "11) summary should be short but substantive: what was checked, whether requirements are met, "
+        "and the primary reason for ok/fix.\n"
+        "12) Keep findings concise; include the highest-impact issues first.\n"
     )
 
     user = (

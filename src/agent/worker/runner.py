@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Background worker that executes queued jobs one-at-a-time.
+
+We intentionally run a single sequential worker for predictability and to reduce the
+risk of concurrent writes (same PR/branch) without needing distributed locks.
+"""
+
 import logging
 import time
 
@@ -23,6 +29,7 @@ def run_worker(cfg: Config) -> None:
     while True:
         job = db.fetch_next_job(conn)
         if job is None:
+            # Simple polling loop; webhook enqueues work, worker drains it.
             time.sleep(1.0)
             continue
 
@@ -61,6 +68,7 @@ def run_worker(cfg: Config) -> None:
             logger.info("Job done id=%s kind=%s", job.id, job.kind)
             job_log.event("job_done", "Job completed", {"kind": job.kind})
         except Exception as exc:  # noqa: BLE001
+            # Store failure in DB for UI visibility; full stack trace is in container logs.
             db.update_job_status(conn, job.id, "failed", error=str(exc))
             logger.exception("Job failed id=%s kind=%s error=%s", job.id, job.kind, exc)
             job_log.event("job_failed", "Job failed", {"error": str(exc)})
